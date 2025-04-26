@@ -1,0 +1,15 @@
+# Format: PID ArrivalTime Size ExecutionTime
+# PID: Process ID (integer)
+# ArrivalTime: Time when process arrives (integer)
+# Size: Memory size in MB (integer)
+# ExecutionTime: Duration the process runs (integer)
+7 0 180 22
+8 2 193 28
+3 3 24 14
+2 7 183 29
+6 7 169 18
+10 12 70 16
+5 16 181 15
+9 18 57 15
+1 19 30 5
+4 19 10 24

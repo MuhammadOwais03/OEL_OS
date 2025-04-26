@@ -7,6 +7,21 @@
 
 #define MAX_PROCESSES 1000
 #define MAX_FILENAME_LENGTH 256
+#define TERMINAL_WIDTH 80
+#define BAR_LENGTH 50
+
+// ANSI color codes for terminal output
+#define COLOR_RESET "\033[0m"
+#define COLOR_RED "\033[1;31m"
+#define COLOR_GREEN "\033[1;32m"
+#define COLOR_YELLOW "\033[1;33m"
+#define COLOR_BLUE "\033[1;34m"
+#define COLOR_MAGENTA "\033[1;35m"
+#define COLOR_CYAN "\033[1;36m"
+#define COLOR_WHITE "\033[1;37m"
+#define COLOR_BRIGHT_BLACK "\033[1;90m"
+#define BOLD "\033[1m"
+#define UNDERLINE "\033[4m"
 
 // Structure for a memory block
 typedef struct MemoryBlock {
@@ -57,6 +72,7 @@ int allocated_count = 0;
 int current_time = 0;
 int total_memory_size = 0;
 SimulationStats stats = {0};
+bool color_enabled = true;
 
 // Function prototypes
 void initialize_memory(int size);
@@ -75,6 +91,78 @@ void free_memory();
 void calculate_memory_utilization();
 void display_simulation_stats();
 void check_process_completion();
+void print_separator(char symbol);
+void print_centered_text(const char* text);
+void print_progress_bar(double percentage, int width);
+void display_simulation_header();
+void display_welcome_screen();
+void clear_screen();
+Process* get_process_by_pid(int pid);
+
+// Clear the terminal screen
+void clear_screen() {
+    #ifdef _WIN32
+        system("cls");
+    #else
+        system("clear");
+    #endif
+}
+
+// Print a separator line
+void print_separator(char symbol) {
+    int i;
+    printf("%s", COLOR_BRIGHT_BLACK);
+    for (i = 0; i < TERMINAL_WIDTH; i++) {
+        printf("%c", symbol);
+    }
+    printf("%s\n", COLOR_RESET);
+}
+
+// Print centered text
+void print_centered_text(const char* text) {
+    int padding = (TERMINAL_WIDTH - strlen(text)) / 2;
+    printf("%*s%s%*s\n", padding, "", text, padding, "");
+}
+
+// Print a progress bar
+void print_progress_bar(double percentage, int width) {
+    int i;
+    int pos = width * percentage;
+    
+    printf("[");
+    for (i = 0; i < width; i++) {
+        if (i < pos) printf("%s█%s", COLOR_GREEN, COLOR_RESET);
+        else printf(" ");
+    }
+    printf("] %s%.1f%%%s", COLOR_YELLOW, percentage * 100, COLOR_RESET);
+}
+
+// Display welcome screen
+void display_welcome_screen() {
+    clear_screen();
+    print_separator('=');
+    printf("%s", COLOR_CYAN);
+    print_centered_text("MEMORY ALLOCATION SIMULATOR");
+    printf("%s", COLOR_RESET);
+    print_separator('-');
+    printf("\n");
+    printf("%s• Best-Fit Algorithm Implementation%s\n", COLOR_YELLOW, COLOR_RESET);
+    printf("%s• Process Execution Simulation%s\n", COLOR_YELLOW, COLOR_RESET);
+    printf("%s• Memory Utilization Tracking%s\n", COLOR_YELLOW, COLOR_RESET);
+    printf("%s• External Fragmentation Analysis%s\n", COLOR_YELLOW, COLOR_RESET);
+    printf("\n");
+    print_separator('-');
+    printf("\n");
+}
+
+// Display simulation header
+void display_simulation_header() {
+    print_separator('=');
+    printf("%s%s", BOLD, COLOR_CYAN);
+    print_centered_text("MEMORY ALLOCATION SIMULATION");
+    printf("%s", COLOR_RESET);
+    print_separator('-');
+}
 
 // Initialize memory with a single free block
 void initialize_memory(int size) {
@@ -96,11 +184,19 @@ void initialize_memory(int size) {
     memory_head->next = NULL;
 }
 
+// Helper function to get process by pid
+Process* get_process_by_pid(int pid) {
+    for (int i = 0; i < MAX_PROCESSES; i++) {
+        if (processes[i].pid == pid) {
+            return &processes[i];
+        }
+    }
+    return NULL;
+}
+
 // Display the current state of memory
 void display_memory_state() {
-    printf("\n==================================================\n");
-    printf("CURRENT MEMORY STATE (Time: %d)\n", current_time);
-    printf("==================================================\n");
+    printf("\n%s%s==== MEMORY STATE (Time: %d) ====%s\n", BOLD, COLOR_CYAN, current_time, COLOR_RESET);
     
     // Calculate total free and used memory
     int total_free = 0;
@@ -116,22 +212,37 @@ void display_memory_state() {
         current = current->next;
     }
     
-    printf("Total Memory: %d MB\n", total_memory_size);
-    printf("Used Memory: %d MB (%.2f%%)\n", total_used, (float)total_used / total_memory_size * 100);
-    printf("Free Memory: %d MB (%.2f%%)\n", total_free, (float)total_free / total_memory_size * 100);
-    printf("--------------------------------------------------\n");
+    double used_percentage = (double)total_used / total_memory_size;
     
-    // Display each memory block
+    printf("\n%sTotal Memory:%s %d MB\n", COLOR_WHITE, COLOR_RESET, total_memory_size);
+    printf("%sUsed Memory:%s %d MB (", COLOR_WHITE, COLOR_RESET, total_used);
+    print_progress_bar(used_percentage, 20);
+    printf(")\n");
+    printf("%sFree Memory:%s %d MB (%.2f%%)\n", COLOR_WHITE, COLOR_RESET, total_free, (float)total_free / total_memory_size * 100);
+    
+    printf("\n%sMemory Blocks:%s\n", BOLD, COLOR_RESET);
+    
+    // Display each memory block as a visualization
     current = memory_head;
+    int block_count = 0;
     while (current != NULL) {
-        printf("[%d - %d] (%d MB) ", current->start_address, 
-               current->start_address + current->size - 1, current->size);
+        block_count++;
         
+        // Display block with different colors based on state
         if (current->is_free) {
-            printf("FREE\n");
+            printf("%s[%5d - %5d]%s %s(%4d MB)%s %sFREE%s\n", 
+                  COLOR_BRIGHT_BLACK, current->start_address, 
+                  current->start_address + current->size - 1, COLOR_RESET,
+                  COLOR_BRIGHT_BLACK, current->size, COLOR_RESET,
+                  COLOR_GREEN, COLOR_RESET);
         } else {
-            // printf("USED by P%d (remaining: %d)\n", current->process_id, 
-            //       get_process_by_pid(current->process_id)->remaining_time);
+            Process* proc = get_process_by_pid(current->process_id);
+            printf("%s[%5d - %5d]%s %s(%4d MB)%s %sP%-3d%s %s(remaining: %d)%s\n", 
+                  COLOR_YELLOW, current->start_address, 
+                  current->start_address + current->size - 1, COLOR_RESET,
+                  COLOR_YELLOW, current->size, COLOR_RESET,
+                  COLOR_RED, current->process_id, COLOR_RESET,
+                  COLOR_BLUE, proc ? proc->remaining_time : 0, COLOR_RESET);
         }
         
         current = current->next;
@@ -154,21 +265,11 @@ void display_memory_state() {
     
     if (free_block_count > 1) {
         stats.total_fragmentation_events++;
-        printf("\nExternal Fragmentation: %d free blocks\n", free_block_count);
-        printf("Largest free block: %d MB\n", largest_free_block);
+        printf("\n%sExternal Fragmentation:%s %d free blocks\n", COLOR_MAGENTA, COLOR_RESET, free_block_count);
+        printf("%sLargest free block:%s %d MB\n", COLOR_MAGENTA, COLOR_RESET, largest_free_block);
     }
     
-    printf("==================================================\n");
-}
-
-// Helper function to get process by pid
-Process* get_process_by_pid(int pid) {
-    for (int i = 0; i < MAX_PROCESSES; i++) {
-        if (processes[i].pid == pid) {
-            return &processes[i];
-        }
-    }
-    return NULL;
+    print_separator('-');
 }
 
 // Best-fit algorithm for memory allocation
@@ -282,14 +383,14 @@ void deallocate_memory(int pid) {
         if (proc != NULL && !proc->completed && proc->remaining_time <= 0) {
             proc->completed = true;
             stats.completed_processes++;
-            printf("Process %d completed execution and deallocated at time %d\n", 
-                   pid, current_time);
+            printf("%sProcess %d completed execution and deallocated at time %d%s\n", 
+                   COLOR_GREEN, pid, current_time, COLOR_RESET);
         }
         
         // Merge adjacent free blocks
         merge_free_blocks();
     } else {
-        printf("Process %d not found in allocated processes.\n", pid);
+        printf("%sProcess %d not found in allocated processes.%s\n", COLOR_RED, pid, COLOR_RESET);
     }
 }
 
@@ -323,8 +424,8 @@ void check_waiting_processes() {
     
     for (i = 0; i < waiting_queue_size; i++) {
         if (allocate_memory(waiting_queue[i])) {
-            printf("Process %d allocated from waiting queue (time: %d)\n", 
-                   waiting_queue[i]->pid, current_time);
+            printf("%sProcess %d allocated from waiting queue (time: %d)%s\n", 
+                   COLOR_GREEN, waiting_queue[i]->pid, current_time, COLOR_RESET);
             allocated_from_queue++;
             
             // Remove from waiting queue by shifting remaining elements
@@ -337,9 +438,9 @@ void check_waiting_processes() {
     }
     
     if (allocated_from_queue > 0) {
-        printf("Allocated %d processes from waiting queue\n", allocated_from_queue);
+        printf("%sAllocated %d processes from waiting queue%s\n", COLOR_GREEN, allocated_from_queue, COLOR_RESET);
         if (waiting_queue_size > 0) {
-            printf("%d processes still waiting\n", waiting_queue_size);
+            printf("%s%d processes still waiting%s\n", COLOR_YELLOW, waiting_queue_size, COLOR_RESET);
         }
     }
 }
@@ -357,7 +458,8 @@ void check_process_completion() {
             
             // Check if process has completed
             if (proc->remaining_time <= 0) {
-                printf("Process %d has finished execution at time %d\n", pid, current_time);
+                printf("%sProcess %d has finished execution at time %d%s\n", 
+                       COLOR_GREEN, pid, current_time, COLOR_RESET);
                 deallocate_memory(pid);
                 // Don't increment i since the array has shifted
             } else {
@@ -402,18 +504,20 @@ void simulate_time_step() {
 bool add_process(Process* process) {
     // If the process arrival time is in the future, queue it
     if (process->arrival_time > current_time) {
-        printf("Process %d will arrive at time %d\n", process->pid, process->arrival_time);
+        printf("%sProcess %d will arrive at time %d%s\n", 
+               COLOR_YELLOW, process->pid, process->arrival_time, COLOR_RESET);
         return false;
     }
     
     // Try to allocate memory
     if (allocate_memory(process)) {
-        printf("Process %d allocated successfully (time: %d, exec time: %d)\n", 
-               process->pid, current_time, process->execution_time);
+        printf("%sProcess %d allocated successfully (time: %d, exec time: %d)%s\n", 
+               COLOR_GREEN, process->pid, current_time, process->execution_time, COLOR_RESET);
         return true;
     } else {
         // If allocation fails, add to waiting queue
-        printf("Not enough memory for Process %d. Added to waiting queue.\n", process->pid);
+        printf("%sNot enough memory for Process %d. Added to waiting queue.%s\n", 
+               COLOR_RED, process->pid, COLOR_RESET);
         waiting_queue[waiting_queue_size++] = process;
         return false;
     }
@@ -462,41 +566,70 @@ Process* create_sample_processes(int num_processes) {
     return processes;
 }
 
-// Read processes from file (new format with execution time)
+// Read processes from file (improved to handle comments and validate data)
 int read_processes_from_file(const char* filename, Process* processes) {
     FILE* file = fopen(filename, "r");
     int count = 0;
+    char line[256];
     
     if (file == NULL) {
-        printf("File %s not found.\n", filename);
+        printf("%sFile %s not found.%s\n", COLOR_RED, filename, COLOR_RESET);
         return 0;
     }
     
-    while (count < MAX_PROCESSES && 
-           fscanf(file, "%d %d %d %d", &processes[count].pid, 
-                  &processes[count].arrival_time, &processes[count].size,
-                  &processes[count].execution_time) == 4) {
-        processes[count].remaining_time = processes[count].execution_time;
-        processes[count].allocated = false;
-        processes[count].allocation_time = -1;
-        processes[count].memory_address = -1;
-        processes[count].waiting_time = 0;
-        processes[count].completed = false;
-        count++;
+    printf("%sReading processes from %s...%s\n", COLOR_BLUE, filename, COLOR_RESET);
+    
+    while (count < MAX_PROCESSES && fgets(line, sizeof(line), file)) {
+        // Skip comments and empty lines
+        if (line[0] == '#' || line[0] == '\n' || (line[0] == '\r' && line[1] == '\n')) {
+            continue;
+        }
+        
+        int pid, arrival, size, exec_time;
+        
+        if (sscanf(line, "%d %d %d %d", &pid, &arrival, &size, &exec_time) == 4) {
+            // Validate data
+            if (pid <= 0 || arrival < 0 || size <= 0 || exec_time <= 0) {
+                printf("%sInvalid data in line: %s (skipping)%s\n", COLOR_RED, line, COLOR_RESET);
+                continue;
+            }
+            
+            processes[count].pid = pid;
+            processes[count].arrival_time = arrival;
+            processes[count].size = size;
+            processes[count].execution_time = exec_time;
+            processes[count].remaining_time = exec_time;
+            processes[count].allocated = false;
+            processes[count].allocation_time = -1;
+            processes[count].memory_address = -1;
+            processes[count].waiting_time = 0;
+            processes[count].completed = false;
+            count++;
+        } else {
+            printf("%sInvalid format in line: %s%s\n", COLOR_RED, line, COLOR_RESET);
+        }
     }
     
     fclose(file);
+    printf("%sSuccessfully read %d processes%s\n", COLOR_GREEN, count, COLOR_RESET);
     return count;
 }
 
-// Save generated processes to a file (new format with execution time)
+// Save generated processes to a file (improved format with comments)
 void save_processes_to_file(Process* processes, int count, const char* filename) {
     FILE* file = fopen(filename, "w");
     
     if (file == NULL) {
-        printf("Could not open file %s for writing.\n", filename);
+        printf("%sCould not open file %s for writing.%s\n", COLOR_RED, filename, COLOR_RESET);
         return;
     }
+    
+    // Write header with format explanation
+    fprintf(file, "# Format: PID ArrivalTime Size ExecutionTime\n");
+    fprintf(file, "# PID: Process ID (integer)\n");
+    fprintf(file, "# ArrivalTime: Time when process arrives (integer)\n");
+    fprintf(file, "# Size: Memory size in MB (integer)\n");
+    fprintf(file, "# ExecutionTime: Duration the process runs (integer)\n");
     
     int i;
     for (i = 0; i < count; i++) {
@@ -505,18 +638,22 @@ void save_processes_to_file(Process* processes, int count, const char* filename)
     }
     
     fclose(file);
-    printf("Saved %d processes to %s\n", count, filename);
+    printf("%sSaved %d processes to %s%s\n", COLOR_GREEN, count, filename, COLOR_RESET);
 }
 
 // Display all currently allocated processes
 void display_allocated_processes() {
     if (allocated_count == 0) {
-        printf("No processes currently allocated in memory.\n");
+        printf("%sNo processes currently allocated in memory.%s\n", COLOR_YELLOW, COLOR_RESET);
         return;
     }
     
-    printf("\nAllocated Processes:\n");
-    printf("--------------------------------------------------\n");
+    printf("\n%s%sALLOCATED PROCESSES%s\n", BOLD, COLOR_CYAN, COLOR_RESET);
+    print_separator('-');
+    
+    printf("%-6s %-8s %-10s %-10s %-12s %-10s %-10s\n", 
+           "PID", "Size", "Address", "Arrival", "Allocation", "Wait", "Remaining");
+    print_separator('-');
     
     int i;
     for (i = 0; i < allocated_count; i++) {
@@ -526,29 +663,37 @@ void display_allocated_processes() {
         // Find the process in our process array
         for (j = 0; j < MAX_PROCESSES; j++) {
             if (processes[j].pid == pid && processes[j].allocated) {
-                printf("Process %d: Size=%dMB, Address=%d, Arrival=%d, Allocated at=%d, "
-                       "Wait time=%d, Exec time=%d, Remaining=%d\n",
-                       processes[j].pid, processes[j].size, processes[j].memory_address,
-                       processes[j].arrival_time, processes[j].allocation_time, 
-                       processes[j].waiting_time, processes[j].execution_time,
-                       processes[j].remaining_time);
+                printf("%s%-6d%s %-8d %-10d %-10d %-12d %-10d %s%-10d%s\n",
+                       COLOR_RED, processes[j].pid, COLOR_RESET, 
+                       processes[j].size, 
+                       processes[j].memory_address,
+                       processes[j].arrival_time, 
+                       processes[j].allocation_time, 
+                       processes[j].waiting_time, 
+                       (processes[j].remaining_time <= 2) ? COLOR_YELLOW : COLOR_BLUE,
+                       processes[j].remaining_time,
+                       COLOR_RESET);
                 break;
             }
         }
     }
+    
+    print_separator('-');
 }
 
 // Display simulation statistics
 void display_simulation_stats() {
-    printf("\n==================================================\n");
-    printf("SIMULATION STATISTICS\n");
-    printf("==================================================\n");
-    printf("Total simulation time: %d units\n", current_time);
-    printf("Successful allocations: %d\n", stats.successful_allocations);
-    printf("Failed allocations: %d\n", stats.failed_allocations);
-    printf("Completed processes: %d\n", stats.completed_processes);
-    printf("Fragmentation events: %d\n", stats.total_fragmentation_events);
-    printf("Maximum waiting time: %d time units\n", stats.max_waiting_time);
+    print_separator('=');
+    printf("%s%sSIMULATION STATISTICS%s\n", BOLD, COLOR_CYAN, COLOR_RESET);
+    print_separator('=');
+    
+    printf("%sTotal simulation time:%s %d units\n", COLOR_WHITE, COLOR_RESET, current_time);
+    
+    printf("\n%sPerformance Metrics:%s\n", BOLD, COLOR_RESET);
+    printf("  %sSuccessful allocations:%s %d\n", COLOR_GREEN, COLOR_RESET, stats.successful_allocations);
+    printf("  %sFailed allocations:%s %d\n", COLOR_RED, COLOR_RESET, stats.failed_allocations);
+    printf("  %sCompleted processes:%s %d\n", COLOR_GREEN, COLOR_RESET, stats.completed_processes);
+    printf("  %sFragmentation events:%s %d\n", COLOR_YELLOW, COLOR_RESET, stats.total_fragmentation_events);
     
     // Calculate turnaround and waiting time statistics
     int total_waiting_time = 0;
@@ -566,19 +711,26 @@ void display_simulation_stats() {
         }
     }
     
+    printf("\n%sTiming Metrics:%s\n", BOLD, COLOR_RESET);
     if (completed_count > 0) {
         stats.avg_waiting_time = (double)total_waiting_time / completed_count;
         stats.avg_turnaround_time = (double)total_turnaround_time / completed_count;
         stats.avg_execution_time = (double)total_execution_time / completed_count;
         
-        printf("Average waiting time: %.2f time units\n", stats.avg_waiting_time);
-        printf("Average turnaround time: %.2f time units\n", stats.avg_turnaround_time);
-        printf("Average execution time: %.2f time units\n", stats.avg_execution_time);
+        printf("  %sAverage waiting time:%s %.2f time units\n", COLOR_BLUE, COLOR_RESET, stats.avg_waiting_time);
+        printf("  %sAverage turnaround time:%s %.2f time units\n", COLOR_BLUE, COLOR_RESET, stats.avg_turnaround_time);
+        printf("  %sAverage execution time:%s %.2f time units\n", COLOR_BLUE, COLOR_RESET, stats.avg_execution_time);
+        printf("  %sMaximum waiting time:%s %d time units\n", COLOR_RED, COLOR_RESET, stats.max_waiting_time);
     }
     
-    printf("Average memory utilization: %.2f%%\n", stats.memory_utilization * 100);
-    printf("Simulation duration: %.4f seconds\n", stats.simulation_duration);
-    printf("==================================================\n");
+    printf("\n%sMemory Utilization:%s %.2f%%\n", BOLD, COLOR_GREEN, stats.memory_utilization * 100);
+    
+    double utilization_visuals = stats.memory_utilization;
+    print_progress_bar(utilization_visuals, BAR_LENGTH);
+    printf("\n");
+    
+    printf("\n%sSimulation duration:%s %.4f seconds\n", COLOR_MAGENTA, COLOR_RESET, stats.simulation_duration);
+    print_separator('=');
 }
 
 // Free all allocated memory at the end
@@ -593,154 +745,127 @@ void free_memory() {
 }
 
 int main() {
-    char input[10];
+    char input[20];
     char filename[MAX_FILENAME_LENGTH];
     int num_processes = 10;
-    int process_count = 0;
-    int i;
-    
-    // Start timing the execution
-    clock_t start_time = clock();
-    
-    // Initialize memory
-    int memory_size = 1024;  // 1 GB in MB
-    initialize_memory(memory_size);
-    
-    // Option to read processes from file or generate them
-    printf("Read processes from file? (y/n): ");
-    scanf("%s", input);
-    
-    if (input[0] == 'y' || input[0] == 'Y') {
-        printf("Enter filename: ");
-        scanf("%s", filename);
-        process_count = read_processes_from_file(filename, processes);
-        
-        if (process_count == 0) {
-            printf("No valid processes found in file. Generating sample processes.\n");
-            Process* generated = create_sample_processes(num_processes);
-            memcpy(processes, generated, num_processes * sizeof(Process));
-            process_count = num_processes;
-            free(generated);
-            
-            printf("Save generated processes to file? (y/n): ");
-            scanf("%s", input);
-            if (input[0] == 'y' || input[0] == 'Y') {
-                save_processes_to_file(processes, process_count, "processes.txt");
-            }
-        }
-    } else {
-        printf("Enter number of processes (default 10): ");
+    int memory_size = 0;
+    bool sim_initialized = false;
+    display_welcome_screen();
+
+    while (1) {
+        print_separator('=');
+        printf("%sMain Menu%s\n", COLOR_CYAN, COLOR_RESET);
+        printf("1. Generate sample processes\n");
+        printf("2. Load processes from file\n");
+        printf("3. Save processes to file\n");
+        printf("4. Set memory size\n");
+        printf("5. Run simulation\n");
+        printf("6. Exit\n");
+        printf("Enter choice: ");
         scanf("%s", input);
-        if (strlen(input) > 0 && atoi(input) > 0) {
-            num_processes = atoi(input);
-        }
-        
-        Process* generated = create_sample_processes(num_processes);
-        memcpy(processes, generated, num_processes * sizeof(Process));
-        process_count = num_processes;
-        free(generated);
-        
-        printf("Save generated processes to file? (y/n): ");
-        scanf("%s", input);
-        if (input[0] == 'y' || input[0] == 'Y') {
-            save_processes_to_file(processes, process_count, "processes.txt");
-        }
-    }
-    
-    // Display process information
-    printf("\nProcess Information:\n");
-    for (i = 0; i < process_count; i++) {
-        printf("P%d: Size=%dMB, Arrival=%d, Execution time=%d\n", 
-               processes[i].pid, processes[i].size, processes[i].arrival_time,
-               processes[i].execution_time);
-    }
-    
-    // Calculate process statistics
-    int min_size = processes[0].size;
-    int max_size = processes[0].size;
-    int total_size = 0;
-    int min_exec = processes[0].execution_time;
-    int max_exec = processes[0].execution_time;
-    int total_exec = 0;
-    
-    for (i = 0; i < process_count; i++) {
-        if (processes[i].size < min_size) min_size = processes[i].size;
-        if (processes[i].size > max_size) max_size = processes[i].size;
-        total_size += processes[i].size;
-        
-        if (processes[i].execution_time < min_exec) min_exec = processes[i].execution_time;
-        if (processes[i].execution_time > max_exec) max_exec = processes[i].execution_time;
-        total_exec += processes[i].execution_time;
-    }
-    
-    printf("\nProcess Statistics:\n");
-    printf("Total Processes: %d\n", process_count);
-    printf("Memory Size: Min=%d MB, Max=%d MB, Avg=%.2f MB\n", 
-           min_size, max_size, (float)total_size / process_count);
-    printf("Execution Time: Min=%d, Max=%d, Avg=%.2f\n", 
-           min_exec, max_exec, (float)total_exec / process_count);
-    printf("Total Process Size: %d MB\n", total_size);
-    printf("Memory Size: %d MB\n", memory_size);
-    
-    // Run simulation
-    printf("\nStarting Memory Allocation Simulation...\n");
-    
-    // Set the maximum simulation time
-    int max_time = 0;
-    for (i = 0; i < process_count; i++) {
-        if (processes[i].arrival_time > max_time) {
-            max_time = processes[i].arrival_time;
-        }
-    }
-    max_time += 50; // Add extra time for simulation to account for execution times
-    
-    // Display initial memory state
-    display_memory_state();
-    
-    // Simulation loop
-    int next_process_index = 0;
-    
-    while (current_time <= max_time) {
-        // Check for arriving processes
-        while (next_process_index < process_count && 
-               processes[next_process_index].arrival_time <= current_time) {
-            add_process(&processes[next_process_index]);
-            display_memory_state();
-            next_process_index++;
-        }
-        
-        // If all processes have been processed, completed, and none are waiting
-        if (next_process_index >= process_count && waiting_queue_size == 0 && allocated_count == 0) {
-            printf("\nAll processes have completed execution. Ending simulation.\n");
+
+        if (strcmp(input, "6") == 0) {
+            printf("Exiting...\n");
+            free_memory();
             break;
         }
-        
-        // Advance time
-        simulate_time_step();
-        
-        // Occasionally display memory state (every 5 time units)
-        if (current_time % 5 == 0) {
-            display_memory_state();
+
+        switch(atoi(input)) {
+            case 1: {
+                printf("Number of processes (max %d): ", MAX_PROCESSES);
+                scanf("%d", &num_processes);
+                Process* sample = create_sample_processes(num_processes);
+                memcpy(processes, sample, num_processes * sizeof(Process));
+                free(sample);
+                printf("%sGenerated %d random processes%s\n", COLOR_GREEN, num_processes, COLOR_RESET);
+                break;
+            }
+            case 2: {
+                printf("Enter filename: ");
+                scanf("%s", filename);
+                num_processes = read_processes_from_file(filename, processes);
+                break;
+            }
+            case 3: {
+                printf("Enter filename: ");
+                scanf("%s", filename);
+                save_processes_to_file(processes, num_processes, filename);
+                break;
+            }
+            case 4: {
+                printf("Enter memory size (MB): ");
+                scanf("%d", &memory_size);
+                if (memory_size <= 0) {
+                    printf("%sInvalid memory size%s\n", COLOR_RED, COLOR_RESET);
+                    break;
+                }
+                if (memory_head) free_memory();
+                initialize_memory(memory_size);
+                sim_initialized = true;
+                printf("%sMemory initialized to %d MB%s\n", COLOR_GREEN, memory_size, COLOR_RESET);
+                break;
+            }
+            case 5: {
+                if (!sim_initialized) {
+                    printf("%sMemory not initialized!%s\n", COLOR_RED, COLOR_RESET);
+                    break;
+                }
+                if (num_processes <= 0) {
+                    printf("%sNo processes loaded!%s\n", COLOR_RED, COLOR_RESET);
+                    break;
+                }
+
+                // Initialize simulation state
+                current_time = 0;
+                memset(&stats, 0, sizeof(stats));
+                waiting_queue_size = 0;
+                allocated_count = 0;
+                memory_head->next = NULL;
+                memory_head->size = memory_size;
+                memory_head->is_free = true;
+
+                // Run simulation
+                int step_mode = 0;
+                printf("Enable step-by-step? (1/0): ");
+                scanf("%d", &step_mode);
+
+                clock_t start = clock();
+                int current_process = 0;
+
+                while (current_process < num_processes || allocated_count > 0 || waiting_queue_size > 0) {
+                    clear_screen();
+                    display_simulation_header();
+
+                    // Add arriving processes
+                    while (current_process < num_processes && 
+                           processes[current_process].arrival_time <= current_time) {
+                        add_process(&processes[current_process]);
+                        current_process++;
+                    }
+
+                    // Update simulation state
+                    simulate_time_step();
+                    display_memory_state();
+                    display_allocated_processes();
+
+                    // Handle display timing
+                    if (step_mode) {
+                        printf("Press ENTER to continue...");
+                        while (getchar() != '\n'); 
+                        getchar();
+                    } else {
+                        usleep(500000); // 0.5 second delay
+                    }
+                }
+
+                stats.simulation_duration = (double)(clock() - start)/CLOCKS_PER_SEC;
+                display_simulation_stats();
+                break;
+            }
+            default:
+                printf("%sInvalid choice!%s\n", COLOR_RED, COLOR_RESET);
         }
     }
-    
-    // Final memory state
-    printf("\nFinal Memory State:\n");
-    display_memory_state();
-    display_allocated_processes();
-    
-    printf("\nSimulation ended at time %d\n", current_time);
-    printf("Processed %d processes, completed %d\n", process_count, stats.completed_processes);
-    
-    // Calculate execution time
-    clock_t end_time = clock();
-    stats.simulation_duration = (double)(end_time - start_time) / CLOCKS_PER_SEC;
-    
-    // Display simulation statistics
-    display_simulation_stats();
-    
-    // Clean up memory
-    free_memory();
-    
+
     return 0;
 }
